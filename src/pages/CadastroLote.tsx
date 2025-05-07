@@ -39,8 +39,9 @@ const CadastroLote = () => {
   const [equipamentoAtualIndex, setEquipamentoAtualIndex] = useState<number | null>(null);
   const navigate = useNavigate();
 
+  // Fetch categorias no início
   useEffect(() => {
-    const fetchCategorias = async () => {
+    (async () => {
       try {
         const { data, error } = await supabase
           .from('categorias')
@@ -51,16 +52,14 @@ const CadastroLote = () => {
         setCategorias(data || []);
       } catch (error) {
         console.error('Erro ao buscar categorias:', error);
-        toast.error('Não foi possível carregar as categorias');
+        toast.error('Erro ao carregar categorias');
       }
-    };
-
-    fetchCategorias();
+    })();
   }, []);
 
   const adicionarEquipamento = () => {
-    const categoriaDefault = equipamentos[0]?.categoria_id || 0;
-    setEquipamentos([...equipamentos, criarEquipamentoVazio(categoriaDefault)]);
+    const categoriaPadrao = equipamentos[0]?.categoria_id ?? 0;
+    setEquipamentos([...equipamentos, criarEquipamentoVazio(categoriaPadrao)]);
   };
 
   const removerEquipamento = (index: number) => {
@@ -69,45 +68,69 @@ const CadastroLote = () => {
     }
   };
 
-  const atualizarEquipamento = (index: number, campo: keyof EquipamentoLote, valor: any) => {
+  const atualizarEquipamento = (
+    index: number,
+    campo: keyof EquipamentoLote,
+    valor: any
+  ) => {
     setEquipamentos(prev =>
-      prev.map((equip, i) => (i === index ? { ...equip, [campo]: valor } : equip))
+      prev.map((equip, i) =>
+        i === index ? { ...equip, [campo]: valor } : equip
+      )
     );
   };
 
   const handleScan = (result: any, index: number) => {
     if (result?.text) {
       atualizarEquipamento(index, 'num_serie', result.text);
-      setScannerAtivo(false);
-      setEquipamentoAtualIndex(null);
+      fecharScanner();
       toast.success('Código lido com sucesso!');
     }
   };
 
   const handleError = (error: any) => {
-    console.error(error);
+    console.error('Erro no QR Scanner:', error);
     toast.error('Erro ao ler código QR');
   };
 
-  const validarDados = () => equipamentos.every(equip =>
-    equip.nome && equip.num_serie && equip.categoria_id && equip.quantidade >= 1
-  );
+  const abrirScanner = (index: number) => {
+    setEquipamentoAtualIndex(index);
+    setScannerAtivo(true);
+  };
+
+  const fecharScanner = () => {
+    setScannerAtivo(false);
+    setEquipamentoAtualIndex(null);
+  };
+
+  const validarEquipamentos = (): boolean => {
+    const todosValidos = equipamentos.every(e =>
+      e.nome && e.num_serie && e.categoria_id && e.quantidade >= 1
+    );
+
+    if (!todosValidos) {
+      toast.error('Por favor, preencha todos os campos obrigatórios');
+      return false;
+    }
+
+    const numerosSerie = equipamentos.map(e => e.num_serie);
+    const numerosUnicos = new Set(numerosSerie);
+
+    if (numerosSerie.length !== numerosUnicos.size) {
+      toast.error('Existem números de série duplicados');
+      return false;
+    }
+
+    return true;
+  };
 
   const handleSubmit = async () => {
-    if (!validarDados()) {
-      toast.error('Por favor, preencha todos os campos obrigatórios');
-      return;
-    }
+    if (!validarEquipamentos()) return;
 
     setLoading(true);
 
     try {
       const numerosSerie = equipamentos.map(e => e.num_serie);
-      const numerosSerieUnicos = new Set(numerosSerie);
-      if (numerosSerieUnicos.size !== numerosSerie.length) {
-        toast.error('Existem números de série duplicados');
-        return;
-      }
 
       const { data: existentes, error: checkError } = await supabase
         .from('equipamentos')
@@ -117,8 +140,8 @@ const CadastroLote = () => {
       if (checkError) throw checkError;
 
       if (existentes?.length) {
-        const numerosExistentes = existentes.map(e => e.num_serie).join(', ');
-        toast.error(`Números de série já cadastrados: ${numerosExistentes}`);
+        const duplicados = existentes.map(e => e.num_serie).join(', ');
+        toast.error(`Números de série já cadastrados: ${duplicados}`);
         return;
       }
 
@@ -132,7 +155,7 @@ const CadastroLote = () => {
       navigate('/equipamentos');
     } catch (error) {
       console.error('Erro ao cadastrar equipamentos:', error);
-      toast.error('Não foi possível cadastrar os equipamentos');
+      toast.error('Erro ao cadastrar os equipamentos');
     } finally {
       setLoading(false);
     }
@@ -161,7 +184,9 @@ const CadastroLote = () => {
                 <input
                   type="text"
                   value={equip.nome}
-                  onChange={(e) => atualizarEquipamento(index, 'nome', e.target.value)}
+                  onChange={(e) =>
+                    atualizarEquipamento(index, 'nome', e.target.value)
+                  }
                   className="input"
                   required
                 />
@@ -173,15 +198,14 @@ const CadastroLote = () => {
                   <input
                     type="text"
                     value={equip.num_serie}
-                    onChange={(e) => atualizarEquipamento(index, 'num_serie', e.target.value)}
+                    onChange={(e) =>
+                      atualizarEquipamento(index, 'num_serie', e.target.value)
+                    }
                     className="input flex-1"
                     required
                   />
                   <button
-                    onClick={() => {
-                      setEquipamentoAtualIndex(index);
-                      setScannerAtivo(true);
-                    }}
+                    onClick={() => abrirScanner(index)}
                     className="btn-secondary"
                     type="button"
                   >
@@ -194,13 +218,21 @@ const CadastroLote = () => {
                 <label className="label">Categoria *</label>
                 <select
                   value={equip.categoria_id}
-                  onChange={(e) => atualizarEquipamento(index, 'categoria_id', Number(e.target.value))}
+                  onChange={(e) =>
+                    atualizarEquipamento(
+                      index,
+                      'categoria_id',
+                      Number(e.target.value)
+                    )
+                  }
                   className="input"
                   required
                 >
                   <option value="">Selecione uma categoria</option>
                   {categorias.map((cat) => (
-                    <option key={cat.id} value={cat.id}>{cat.nome}</option>
+                    <option key={cat.id} value={cat.id}>
+                      {cat.nome}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -211,7 +243,9 @@ const CadastroLote = () => {
                   type="number"
                   min="1"
                   value={equip.quantidade}
-                  onChange={(e) => atualizarEquipamento(index, 'quantidade', Number(e.target.value))}
+                  onChange={(e) =>
+                    atualizarEquipamento(index, 'quantidade', Number(e.target.value))
+                  }
                   className="input"
                   required
                 />
@@ -222,7 +256,9 @@ const CadastroLote = () => {
                 <input
                   type="date"
                   value={equip.data_aquisicao}
-                  onChange={(e) => atualizarEquipamento(index, 'data_aquisicao', e.target.value)}
+                  onChange={(e) =>
+                    atualizarEquipamento(index, 'data_aquisicao', e.target.value)
+                  }
                   className="input"
                   required
                 />
@@ -232,7 +268,9 @@ const CadastroLote = () => {
                 <label className="label">Descrição</label>
                 <textarea
                   value={equip.descricao}
-                  onChange={(e) => atualizarEquipamento(index, 'descricao', e.target.value)}
+                  onChange={(e) =>
+                    atualizarEquipamento(index, 'descricao', e.target.value)
+                  }
                   className="input"
                   rows={3}
                 />
@@ -242,15 +280,27 @@ const CadastroLote = () => {
         ))}
 
         <div className="flex justify-between">
-          <button onClick={adicionarEquipamento} className="btn-secondary" type="button">
+          <button
+            onClick={adicionarEquipamento}
+            className="btn-secondary"
+            type="button"
+          >
             <Plus size={18} className="mr-2" /> Adicionar Equipamento
           </button>
 
           <div className="space-x-3">
-            <button onClick={() => navigate('/equipamentos')} className="btn-secondary" type="button">
+            <button
+              onClick={() => navigate('/equipamentos')}
+              className="btn-secondary"
+              type="button"
+            >
               Cancelar
             </button>
-            <button onClick={handleSubmit} className="btn-primary" disabled={loading}>
+            <button
+              onClick={handleSubmit}
+              className="btn-primary"
+              disabled={loading}
+            >
               {loading ? (
                 <div className="w-5 h-5 border-t-2 border-white rounded-full animate-spin mr-2"></div>
               ) : (
@@ -267,7 +317,7 @@ const CadastroLote = () => {
           <div className="bg-white p-6 rounded-lg max-w-md w-full">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-lg font-medium">Ler Código QR</h3>
-              <button onClick={() => { setScannerAtivo(false); setEquipamentoAtualIndex(null); }} className="text-gray-500 hover:text-gray-700">
+              <button onClick={fecharScanner} className="text-gray-500 hover:text-gray-700">
                 <Ban size={20} />
               </button>
             </div>
@@ -275,7 +325,9 @@ const CadastroLote = () => {
             <div className="aspect-square overflow-hidden rounded-lg">
               <QrReader
                 constraints={{ facingMode: 'environment' }}
-                onResult={(result) => result && handleScan(result, equipamentoAtualIndex)}
+                onResult={(result) =>
+                  result && handleScan(result, equipamentoAtualIndex)
+                }
                 onError={handleError}
                 className="w-full"
               />
