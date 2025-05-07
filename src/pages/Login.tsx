@@ -47,9 +47,9 @@ const Login = () => {
               <Package size={30} className="text-primary-600" />
             </div>
           </div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">InventControl</h2>
+          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">Controle de Inventário</h2>
           <p className="mt-2 text-center text-sm text-gray-600">
-            Sistema de Gerenciamento de Inventário
+            Sistema de Gerenciamento de Inventário Alô Rastreamento/Lock Proteção Veicular
           </p>
         </div>
         
